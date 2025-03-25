@@ -1,5 +1,4 @@
 # face_recognition_ai.py
-
 import streamlit as st
 import cv2
 import numpy as np
