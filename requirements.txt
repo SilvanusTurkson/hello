@@ -3,5 +3,5 @@ opencv-python-headless
 deepface
 numpy
 pandas
-tensorflow==2.15.0
-keras==2.15.0
+tensorflow
+keras
