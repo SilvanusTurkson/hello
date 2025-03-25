@@ -80,15 +80,20 @@ if input_mode == "Upload Image":
         try:
             faces = DeepFace.extract_faces(image, detector_backend=DETECTOR)
             for i, face in enumerate(faces):
-                x, y, w, h = face["facial_area"].values()
-                cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                facial_area = face.get("facial_area", {})
 
-                if register_mode and new_face_name:
-                    save_face_embedding(face["face"], new_face_name)
+                if len(facial_area) == 4:
+                    x, y, w, h = facial_area.values()
+                    cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
+
+                    if register_mode and new_face_name:
+                        save_face_embedding(face["face"], new_face_name)
+                    else:
+                        name, confidence = recognize_face(face["face"])
+                        cv2.putText(image, f"{name} ({confidence:.2f})", (x, y-10), 
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
                 else:
-                    name, confidence = recognize_face(face["face"])
-                    cv2.putText(image, f"{name} ({confidence:.2f})", (x, y-10), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
+                    st.warning("Invalid face area detected")
 
             st.image(image, caption="Processed Image", use_column_width=True)
         except Exception as e:
@@ -117,17 +122,22 @@ else:  # Webcam mode
                 faces = DeepFace.extract_faces(frame, detector_backend=DETECTOR, enforce_detection=False)
                 for face in faces:
                     if face["confidence"] > 0.9:
-                        x, y, w, h = face["facial_area"].values()
-                        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                        facial_area = face.get("facial_area", {})
 
-                        if register_mode and new_face_name:
-                            save_face_embedding(face["face"], new_face_name)
+                        if len(facial_area) == 4:
+                            x, y, w, h = facial_area.values()
+                            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+
+                            if register_mode and new_face_name:
+                                save_face_embedding(face["face"], new_face_name)
+                            else:
+                                name, confidence = recognize_face(face["face"])
+                                cv2.putText(frame, f"{name} ({confidence:.2f})", (x, y-10), 
+                                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
                         else:
-                            name, confidence = recognize_face(face["face"])
-                            cv2.putText(frame, f"{name} ({confidence:.2f})", (x, y-10), 
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
-            except:
-                pass
+                            st.warning("Invalid face area detected")
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
 
         FRAME_WINDOW.image(frame)
         sleep(0.01)
