@@ -4,4 +4,4 @@ deepface
 numpy
 pandas
 tensorflow
-keras
+tf-keras
