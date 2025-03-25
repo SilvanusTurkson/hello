@@ -7,12 +7,19 @@ import os
 import av
 from streamlit_webrtc import webrtc_streamer, RTCConfiguration
 
+# Ensure required libraries are installed
+try:
+    import av
+    from streamlit_webrtc import webrtc_streamer, RTCConfiguration
+except ImportError:
+    st.error("Missing required packages. Install with: pip install streamlit-webrtc av")
+
 # ===== CONFIG =====
 KNOWN_FACES_DB = "faces_db.csv"
 MODEL = "Facenet512"
 DETECTOR = "retinaface"
 THRESHOLD = 0.6
-cascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
+cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
 # ===== STREAMLIT UI =====
 st.set_page_config(page_title="Face Recognition", layout="wide")
@@ -21,8 +28,7 @@ st.title("🌭️ Real-Time Face Recognition")
 with st.sidebar:
     st.header("Settings")
     register_mode = st.checkbox("Register New Face")
-    if register_mode:
-        new_face_name = st.text_input("Enter Name:")
+    new_face_name = st.text_input("Enter Name:") if register_mode else None
 
 # ===== FUNCTIONS =====
 def save_face_embedding(face_img, name):
