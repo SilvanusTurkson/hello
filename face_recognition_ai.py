@@ -1,3 +1,5 @@
+# face_recognition_ai.py
+
 import streamlit as st
 import cv2
 import numpy as np
@@ -7,10 +9,10 @@ import os
 from time import sleep
 
 # ===== CONFIG =====
-KNOWN_FACES_DB = "faces_db.csv"
-MODEL = "Facenet512"
-DETECTOR = "retinaface"
-THRESHOLD = 0.6
+KNOWN_FACES_DB = "faces_db.csv"  # CSV to store known faces
+MODEL = "Facenet512"             # Best accuracy: "ArcFace" or "Facenet512"
+DETECTOR = "retinaface"          # Best detector: "retinaface" or "mtcnn"
+THRESHOLD = 0.6                  # Higher = stricter matches
 
 # ===== STREAMLIT UI =====
 st.set_page_config(page_title="Face Recognition", layout="wide")
@@ -29,7 +31,12 @@ with st.sidebar:
 def save_face_embedding(face_img, name):
     """Save face embeddings to CSV"""
     try:
-        embedding = DeepFace.represent(face_img, model_name=MODEL, detector_backend=DETECTOR)[0]["embedding"]
+        embeddings = DeepFace.represent(face_img, model_name=MODEL, detector_backend=DETECTOR, enforce_detection=False)
+        if not embeddings:
+            st.error("No face detected. Try again with a clearer image.")
+            return
+
+        embedding = embeddings[0]["embedding"]
 
         if os.path.exists(KNOWN_FACES_DB):
             df = pd.read_csv(KNOWN_FACES_DB)
@@ -48,7 +55,11 @@ def recognize_face(face_img):
         if not os.path.exists(KNOWN_FACES_DB):
             return "No database found", 0
 
-        query_embedding = DeepFace.represent(face_img, model_name=MODEL, enforce_detection=False)[0]["embedding"]
+        embeddings = DeepFace.represent(face_img, model_name=MODEL, enforce_detection=False)
+        if not embeddings:
+            return "No face detected", 0
+
+        query_embedding = embeddings[0]["embedding"]
         df = pd.read_csv(KNOWN_FACES_DB)
         df["embedding"] = df["embedding"].apply(eval)
 
@@ -76,28 +87,24 @@ if input_mode == "Upload Image":
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         try:
-            faces = DeepFace.extract_faces(image, detector_backend=DETECTOR)
+            faces = DeepFace.extract_faces(image, detector_backend=DETECTOR, enforce_detection=False)
             if not faces:
-                st.error("No faces detected.")
+                st.error("No face detected. Try uploading a different image.")
 
-            for face in faces:
+            for i, face in enumerate(faces):
                 facial_area = face.get("facial_area", {})
-                if not facial_area:
-                    st.error("Invalid face area detected.")
-                    continue
+                if facial_area:
+                    x, y, w, h = facial_area.values()
+                    cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
-                x, y, w, h = facial_area["x"], facial_area["y"], facial_area["w"], facial_area["h"]
-                cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-                if register_mode and new_face_name:
-                    save_face_embedding(face["face"], new_face_name)
-                else:
-                    name, confidence = recognize_face(face["face"])
-                    cv2.putText(image, f"{name} ({confidence:.2f})", (x, y - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                    if register_mode and new_face_name:
+                        save_face_embedding(face["face"], new_face_name)
+                    else:
+                        name, confidence = recognize_face(face["face"])
+                        cv2.putText(image, f"{name} ({confidence:.2f})", (x, y-10), 
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
 
             st.image(image, caption="Processed Image", use_container_width=True)
-
         except Exception as e:
             st.error(f"Error: {str(e)}")
 
@@ -122,24 +129,20 @@ else:  # Webcam mode
         if frame_count % detect_every_n == 0:
             try:
                 faces = DeepFace.extract_faces(frame, detector_backend=DETECTOR, enforce_detection=False)
-
                 for face in faces:
                     facial_area = face.get("facial_area", {})
-                    if not facial_area:
-                        continue
+                    if facial_area:
+                        x, y, w, h = facial_area.values()
+                        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
-                    x, y, w, h = facial_area["x"], facial_area["y"], facial_area["w"], facial_area["h"]
-                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-                    if register_mode and new_face_name:
-                        save_face_embedding(face["face"], new_face_name)
-                    else:
-                        name, confidence = recognize_face(face["face"])
-                        cv2.putText(frame, f"{name} ({confidence:.2f})", (x, y - 10),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-
+                        if register_mode and new_face_name:
+                            save_face_embedding(face["face"], new_face_name)
+                        else:
+                            name, confidence = recognize_face(face["face"])
+                            cv2.putText(frame, f"{name} ({confidence:.2f})", (x, y-10), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
             except Exception as e:
-                st.error(f"Error during face extraction: {str(e)}")
+                st.error(f"Error: {str(e)}")
 
         FRAME_WINDOW.image(frame)
         sleep(0.01)
