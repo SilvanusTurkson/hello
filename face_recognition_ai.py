@@ -4,8 +4,6 @@ import numpy as np
 import pandas as pd
 from deepface import DeepFace
 import os
-import av
-from streamlit_webrtc import webrtc_streamer, RTCConfiguration
 
 # Ensure required libraries are installed
 try:
@@ -73,21 +71,26 @@ def recognize_face(face_img):
 # ===== Video Processor for Streamlit WebRTC =====
 class VideoProcessor:
     def recv(self, frame):
-        frm = frame.to_ndarray(format="bgr24")
+        try:
+            frm = frame.to_ndarray(format="bgr24")
 
-        faces = cascade.detectMultiScale(cv2.cvtColor(frm, cv2.COLOR_BGR2GRAY), 1.1, 3)
+            faces = cascade.detectMultiScale(cv2.cvtColor(frm, cv2.COLOR_BGR2GRAY), 1.1, 3)
 
-        for x, y, w, h in faces:
-            face_img = frm[y:y + h, x:x + w]
+            for x, y, w, h in faces:
+                face_img = frm[y:y + h, x:x + w]
 
-            if register_mode and new_face_name:
-                save_face_embedding(face_img, new_face_name)
-            else:
-                name, confidence = recognize_face(face_img)
-                cv2.rectangle(frm, (x, y), (x + w, y + h), (0, 255, 0), 3)
-                cv2.putText(frm, f"{name} ({confidence:.2f})", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                if register_mode and new_face_name:
+                    save_face_embedding(face_img, new_face_name)
+                else:
+                    name, confidence = recognize_face(face_img)
+                    cv2.rectangle(frm, (x, y), (x + w, y + h), (0, 255, 0), 3)
+                    cv2.putText(frm, f"{name} ({confidence:.2f})", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
 
-        return av.VideoFrame.from_ndarray(frm, format='bgr24')
+            return av.VideoFrame.from_ndarray(frm, format='bgr24')
+
+        except Exception as e:
+            st.error(f"Error processing frame: {str(e)}")
+            return av.VideoFrame.from_ndarray(frm, format='bgr24')
 
 webrtc_streamer(key="key", video_processor_factory=VideoProcessor,
                 rtc_configuration=RTCConfiguration(
