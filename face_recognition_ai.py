@@ -5,33 +5,17 @@ import pandas as pd
 from deepface import DeepFace
 import os
 
-# Ensure required libraries are installed
-try:
-    import av
-    from streamlit_webrtc import webrtc_streamer, RTCConfiguration
-except ImportError:
-    st.error("Missing required packages. Install with: pip install streamlit-webrtc av")
-
-# ===== CONFIG =====
-KNOWN_FACES_DB = "faces_db.csv"
-MODEL = "Facenet512"
-DETECTOR = "retinaface"
+# Configuration Constants
+KNOWN_FACES_DB = "face_embeddings.csv"
+MODEL_NAME = "Facenet512"
+DETECTOR_BACKEND = "retinaface"
 THRESHOLD = 0.6
-cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
-# ===== STREAMLIT UI =====
-st.set_page_config(page_title="Face Recognition", layout="wide")
-st.title("🌭️ Real-Time Face Recognition")
-
-with st.sidebar:
-    st.header("Settings")
-    register_mode = st.checkbox("Register New Face")
-    new_face_name = st.text_input("Enter Name:") if register_mode else None
-
-# ===== FUNCTIONS =====
+# Save face embeddings to CSV
 def save_face_embedding(face_img, name):
     try:
-        embedding = DeepFace.represent(face_img, model_name=MODEL, detector_backend=DETECTOR, enforce_detection=False)[0]["embedding"]
+        embedding = DeepFace.represent(face_img, model_name=MODEL_NAME, detector_backend=DETECTOR_BACKEND)[0]["embedding"]
+
         if os.path.exists(KNOWN_FACES_DB):
             df = pd.read_csv(KNOWN_FACES_DB)
         else:
@@ -39,24 +23,21 @@ def save_face_embedding(face_img, name):
 
         df = pd.concat([df, pd.DataFrame([{"name": name, "embedding": str(embedding)}])], ignore_index=True)
         df.to_csv(KNOWN_FACES_DB, index=False)
-        st.success(f"Saved {name}'s face!")
+        st.success(f"✅ {name}'s face saved successfully!")
     except Exception as e:
-        st.error(f"Error saving face: {str(e)}")
+        st.error(f"❌ Error saving face: {str(e)}")
 
+# Recognize face from known embeddings
 def recognize_face(face_img):
     try:
         if not os.path.exists(KNOWN_FACES_DB):
-            return "No database found", 0
+            return "No database available", 0
 
-        query_embedding = DeepFace.represent(face_img, model_name=MODEL, enforce_detection=False)[0]["embedding"]
+        query_embedding = DeepFace.represent(face_img, model_name=MODEL_NAME, enforce_detection=False)[0]["embedding"]
         df = pd.read_csv(KNOWN_FACES_DB)
         df["embedding"] = df["embedding"].apply(eval)
 
-        similarities = []
-        for _, row in df.iterrows():
-            db_embedding = np.array(row["embedding"])
-            cos_sim = np.dot(query_embedding, db_embedding) / (np.linalg.norm(query_embedding) * np.linalg.norm(db_embedding))
-            similarities.append(cos_sim)
+        similarities = [np.dot(query_embedding, np.array(row["embedding"])) / (np.linalg.norm(query_embedding) * np.linalg.norm(np.array(row["embedding"]))) for _, row in df.iterrows()]
 
         best_match_idx = np.argmax(similarities)
         confidence = similarities[best_match_idx]
@@ -68,31 +49,70 @@ def recognize_face(face_img):
     except Exception as e:
         return f"Error: {str(e)}", 0
 
-# ===== Video Processor for Streamlit WebRTC =====
-class VideoProcessor:
-    def recv(self, frame):
+# Streamlit App Interface
+st.set_page_config(page_title="🎭 AI Face Recognition System", layout="wide")
+st.title("📸 Real-Time Face Recognition")
+
+with st.sidebar:
+    st.header("Settings")
+    input_mode = st.radio("Input Mode", ("Webcam", "Upload Image"))
+    register_mode = st.checkbox("Register New Face")
+    new_face_name = st.text_input("Enter New Face Name") if register_mode else None
+
+# Image Upload Mode
+if input_mode == "Upload Image":
+    uploaded_file = st.file_uploader("📤 Upload an image", type=["jpg", "jpeg", "png"])
+    if uploaded_file:
+        image = cv2.imdecode(np.frombuffer(uploaded_file.read(), np.uint8), 1)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        st.image(image, caption="Uploaded Image", use_column_width=True)
+
         try:
-            frm = frame.to_ndarray(format="bgr24")
-
-            faces = cascade.detectMultiScale(cv2.cvtColor(frm, cv2.COLOR_BGR2GRAY), 1.1, 3)
-
-            for x, y, w, h in faces:
-                face_img = frm[y:y + h, x:x + w]
+            faces = DeepFace.extract_faces(image, detector_backend=DETECTOR_BACKEND)
+            for face in faces:
+                x, y, w, h = face["facial_area"].values()
+                cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
                 if register_mode and new_face_name:
-                    save_face_embedding(face_img, new_face_name)
+                    save_face_embedding(face["face"], new_face_name)
                 else:
-                    name, confidence = recognize_face(face_img)
-                    cv2.rectangle(frm, (x, y), (x + w, y + h), (0, 255, 0), 3)
-                    cv2.putText(frm, f"{name} ({confidence:.2f})", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                    name, confidence = recognize_face(face["face"])
+                    cv2.putText(image, f"{name} ({confidence:.2f})", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
 
-            return av.VideoFrame.from_ndarray(frm, format='bgr24')
-
+                st.image(image, caption="Processed Image", use_column_width=True)
         except Exception as e:
-            st.error(f"Error processing frame: {str(e)}")
-            return av.VideoFrame.from_ndarray(frm, format='bgr24')
+            st.error(f"❌ Error: {str(e)}")
 
-webrtc_streamer(key="key", video_processor_factory=VideoProcessor,
-                rtc_configuration=RTCConfiguration(
-                    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-                ))
+# Webcam Mode
+else:
+    FRAME_WINDOW = st.empty()
+    cam = cv2.VideoCapture(0)
+
+    stop_button = st.button("Stop Webcam")
+
+    while not stop_button:
+        ret, frame = cam.read()
+        if not ret:
+            st.error("❌ Error capturing frame from webcam")
+            break
+
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        try:
+            faces = DeepFace.extract_faces(frame, detector_backend=DETECTOR_BACKEND, enforce_detection=False)
+            for face in faces:
+                x, y, w, h = face["facial_area"].values()
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+                if register_mode and new_face_name:
+                    save_face_embedding(face["face"], new_face_name)
+                else:
+                    name, confidence = recognize_face(face["face"])
+                    cv2.putText(frame, f"{name} ({confidence:.2f})", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+        except Exception as e:
+            pass
+
+        FRAME_WINDOW.image(frame)
+
+    cam.release()
+    st.warning("📸 Webcam stopped!")
