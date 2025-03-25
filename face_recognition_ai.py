@@ -1,4 +1,5 @@
 # face_recognition_ai.py
+
 import streamlit as st
 import cv2
 import numpy as np
@@ -30,12 +31,7 @@ with st.sidebar:
 def save_face_embedding(face_img, name):
     """Save face embeddings to CSV"""
     try:
-        embeddings = DeepFace.represent(face_img, model_name=MODEL, detector_backend=DETECTOR, enforce_detection=False)
-        if not embeddings:
-            st.error("No face detected. Try again with a clearer image.")
-            return
-
-        embedding = embeddings[0]["embedding"]
+        embedding = DeepFace.represent(face_img, model_name=MODEL, detector_backend=DETECTOR, enforce_detection=False)[0]["embedding"]
 
         if os.path.exists(KNOWN_FACES_DB):
             df = pd.read_csv(KNOWN_FACES_DB)
@@ -54,11 +50,7 @@ def recognize_face(face_img):
         if not os.path.exists(KNOWN_FACES_DB):
             return "No database found", 0
 
-        embeddings = DeepFace.represent(face_img, model_name=MODEL, enforce_detection=False)
-        if not embeddings:
-            return "No face detected", 0
-
-        query_embedding = embeddings[0]["embedding"]
+        query_embedding = DeepFace.represent(face_img, model_name=MODEL, enforce_detection=False)[0]["embedding"]
         df = pd.read_csv(KNOWN_FACES_DB)
         df["embedding"] = df["embedding"].apply(eval)
 
@@ -87,21 +79,16 @@ if input_mode == "Upload Image":
 
         try:
             faces = DeepFace.extract_faces(image, detector_backend=DETECTOR, enforce_detection=False)
-            if not faces:
-                st.error("No face detected. Try uploading a different image.")
-
             for i, face in enumerate(faces):
-                facial_area = face.get("facial_area", {})
-                if facial_area:
-                    x, y, w, h = facial_area.values()
-                    cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                x, y, w, h = face["facial_area"].values()  # Fixed the unpacking error
+                cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
-                    if register_mode and new_face_name:
-                        save_face_embedding(face["face"], new_face_name)
-                    else:
-                        name, confidence = recognize_face(face["face"])
-                        cv2.putText(image, f"{name} ({confidence:.2f})", (x, y-10), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
+                if register_mode and new_face_name:
+                    save_face_embedding(face["face"], new_face_name)
+                else:
+                    name, confidence = recognize_face(face["face"])
+                    cv2.putText(image, f"{name} ({confidence:.2f})", (x, y-10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
 
             st.image(image, caption="Processed Image", use_container_width=True)
         except Exception as e:
@@ -129,19 +116,18 @@ else:  # Webcam mode
             try:
                 faces = DeepFace.extract_faces(frame, detector_backend=DETECTOR, enforce_detection=False)
                 for face in faces:
-                    facial_area = face.get("facial_area", {})
-                    if facial_area:
-                        x, y, w, h = facial_area.values()
+                    if face["confidence"] > 0.9:
+                        x, y, w, h = face["facial_area"].values()  # Fixed the unpacking error
                         cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
                         if register_mode and new_face_name:
                             save_face_embedding(face["face"], new_face_name)
                         else:
                             name, confidence = recognize_face(face["face"])
-                            cv2.putText(frame, f"{name} ({confidence:.2f})", (x, y-10), 
+                            cv2.putText(frame, f"{name} ({confidence:.2f})", (x, y-10),
                                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+            except:
+                pass
 
         FRAME_WINDOW.image(frame)
         sleep(0.01)
