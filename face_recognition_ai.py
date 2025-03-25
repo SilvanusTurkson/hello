@@ -7,7 +7,7 @@ import os
 from time import sleep
 
 # ===== CONFIG =====
-KNOWN_FACES_DB = "face_embeddings.csv"  # CSV to store known faces
+KNOWN_FACES_DB = "face_emeddings.csv"  # CSV to store known faces
 MODEL = "Facenet512"             # Best accuracy: "ArcFace" or "Facenet512"
 DETECTOR = "retinaface"          # Best detector: "retinaface" or "mtcnn"
 THRESHOLD = 0.6                  # Higher = stricter matches
@@ -96,6 +96,10 @@ if input_mode == "Upload Image":
 else:  # Webcam mode
     FRAME_WINDOW = st.empty()
     cam = cv2.VideoCapture(0)
+
+    if not cam.isOpened():
+        st.error("Error: Cannot access webcam. Check permissions or camera index.")
+
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
@@ -105,7 +109,7 @@ else:  # Webcam mode
     while not stop_button:
         ret, frame = cam.read()
         if not ret:
-            st.error("Failed to capture frame")
+            st.error("Failed to capture frame. Try restarting the app or checking camera access.")
             break
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -126,8 +130,8 @@ else:  # Webcam mode
                             name, confidence = recognize_face(face["face"])
                             cv2.putText(frame, f"{name} ({confidence:.2f})", (x, y-10),
                                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
-            except:
-                pass
+            except Exception as e:
+                st.error(f"Error processing faces: {str(e)}")
 
         FRAME_WINDOW.image(frame)
         sleep(0.01)
