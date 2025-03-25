@@ -11,6 +11,13 @@ MODEL_NAME = "Facenet512"
 DETECTOR_BACKEND = "retinaface"
 THRESHOLD = 0.6
 
+def initialize_webcam():
+    for index in range(5):  # Try multiple webcam indices
+        cam = cv2.VideoCapture(index)
+        if cam.isOpened():
+            return cam
+    return None
+
 # Save face embeddings to CSV
 def save_face_embedding(face_img, name):
     try:
@@ -86,7 +93,11 @@ if input_mode == "Upload Image":
 # Webcam Mode
 else:
     FRAME_WINDOW = st.empty()
-    cam = cv2.VideoCapture(0)
+    cam = initialize_webcam()
+
+    if not cam:
+        st.error("❌ No webcam found. Ensure it's connected and accessible.")
+        st.stop()
 
     stop_button = st.button("Stop Webcam")
 
@@ -110,7 +121,7 @@ else:
                     name, confidence = recognize_face(face["face"])
                     cv2.putText(frame, f"{name} ({confidence:.2f})", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
         except Exception as e:
-            pass
+            st.error(f"❌ Face detection error: {str(e)}")
 
         FRAME_WINDOW.image(frame)
 
