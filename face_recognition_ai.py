@@ -1,5 +1,3 @@
-# face_recognition_ai.py
-
 import streamlit as st
 import cv2
 import numpy as np
@@ -9,10 +7,10 @@ import os
 from time import sleep
 
 # ===== CONFIG =====
-KNOWN_FACES_DB = "faces_db.csv"  # CSV to store known faces
-MODEL = "Facenet512"             # Best accuracy: "ArcFace" or "Facenet512"
-DETECTOR = "retinaface"          # Best detector: "retinaface" or "mtcnn"
-THRESHOLD = 0.6                  # Higher = stricter matches
+KNOWN_FACES_DB = "faces_db.csv"
+MODEL = "Facenet512"
+DETECTOR = "retinaface"
+THRESHOLD = 0.6
 
 # ===== STREAMLIT UI =====
 st.set_page_config(page_title="Face Recognition", layout="wide")
@@ -67,8 +65,8 @@ def recognize_face(face_img):
             return df.iloc[best_match_idx]["name"], confidence
         else:
             return "Unknown", confidence
-    except:
-        return "Error", 0
+    except Exception as e:
+        return f"Error: {str(e)}", 0
 
 # ===== MAIN PROCESSING =====
 if input_mode == "Upload Image":
@@ -79,23 +77,27 @@ if input_mode == "Upload Image":
 
         try:
             faces = DeepFace.extract_faces(image, detector_backend=DETECTOR)
-            for i, face in enumerate(faces):
+            if not faces:
+                st.error("No faces detected.")
+
+            for face in faces:
                 facial_area = face.get("facial_area", {})
+                if not facial_area:
+                    st.error("Invalid face area detected.")
+                    continue
 
-                if len(facial_area) == 4:
-                    x, y, w, h = facial_area.values()
-                    cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                x, y, w, h = facial_area["x"], facial_area["y"], facial_area["w"], facial_area["h"]
+                cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-                    if register_mode and new_face_name:
-                        save_face_embedding(face["face"], new_face_name)
-                    else:
-                        name, confidence = recognize_face(face["face"])
-                        cv2.putText(image, f"{name} ({confidence:.2f})", (x, y-10), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
+                if register_mode and new_face_name:
+                    save_face_embedding(face["face"], new_face_name)
                 else:
-                    st.warning("Invalid face area detected")
+                    name, confidence = recognize_face(face["face"])
+                    cv2.putText(image, f"{name} ({confidence:.2f})", (x, y - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
 
-            st.image(image, caption="Processed Image", use_column_width=True)
+            st.image(image, caption="Processed Image", use_container_width=True)
+
         except Exception as e:
             st.error(f"Error: {str(e)}")
 
@@ -120,24 +122,24 @@ else:  # Webcam mode
         if frame_count % detect_every_n == 0:
             try:
                 faces = DeepFace.extract_faces(frame, detector_backend=DETECTOR, enforce_detection=False)
+
                 for face in faces:
-                    if face["confidence"] > 0.9:
-                        facial_area = face.get("facial_area", {})
+                    facial_area = face.get("facial_area", {})
+                    if not facial_area:
+                        continue
 
-                        if len(facial_area) == 4:
-                            x, y, w, h = facial_area.values()
-                            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                    x, y, w, h = facial_area["x"], facial_area["y"], facial_area["w"], facial_area["h"]
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-                            if register_mode and new_face_name:
-                                save_face_embedding(face["face"], new_face_name)
-                            else:
-                                name, confidence = recognize_face(face["face"])
-                                cv2.putText(frame, f"{name} ({confidence:.2f})", (x, y-10), 
-                                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
-                        else:
-                            st.warning("Invalid face area detected")
+                    if register_mode and new_face_name:
+                        save_face_embedding(face["face"], new_face_name)
+                    else:
+                        name, confidence = recognize_face(face["face"])
+                        cv2.putText(frame, f"{name} ({confidence:.2f})", (x, y - 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+
             except Exception as e:
-                st.error(f"Error: {str(e)}")
+                st.error(f"Error during face extraction: {str(e)}")
 
         FRAME_WINDOW.image(frame)
         sleep(0.01)
