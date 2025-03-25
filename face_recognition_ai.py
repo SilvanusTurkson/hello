@@ -7,10 +7,10 @@ import os
 from time import sleep
 
 # ===== CONFIG =====
-KNOWN_FACES_DB = "face_emeddings.csv"  # CSV to store known faces
-MODEL = "Facenet512"             # Best accuracy: "ArcFace" or "Facenet512"
-DETECTOR = "retinaface"          # Best detector: "retinaface" or "mtcnn"
-THRESHOLD = 0.6                  # Higher = stricter matches
+KNOWN_FACES_DB = "faces_db.csv"
+MODEL = "Facenet512"
+DETECTOR = "retinaface"
+THRESHOLD = 0.6
 
 # ===== STREAMLIT UI =====
 st.set_page_config(page_title="Face Recognition", layout="wide")
@@ -26,11 +26,18 @@ with st.sidebar:
         new_face_name = st.text_input("Enter Name:")
 
 # ===== FUNCTIONS =====
+def find_working_camera():
+    """Find a working camera index."""
+    for i in range(5):  # Try 5 camera indexes
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            cap.release()
+            return i
+    return None
+
 def save_face_embedding(face_img, name):
-    """Save face embeddings to CSV"""
     try:
         embedding = DeepFace.represent(face_img, model_name=MODEL, detector_backend=DETECTOR, enforce_detection=False)[0]["embedding"]
-
         if os.path.exists(KNOWN_FACES_DB):
             df = pd.read_csv(KNOWN_FACES_DB)
         else:
@@ -43,7 +50,6 @@ def save_face_embedding(face_img, name):
         st.error(f"Error saving face: {str(e)}")
 
 def recognize_face(face_img):
-    """Compare face against known embeddings"""
     try:
         if not os.path.exists(KNOWN_FACES_DB):
             return "No database found", 0
@@ -78,38 +84,40 @@ if input_mode == "Upload Image":
         try:
             faces = DeepFace.extract_faces(image, detector_backend=DETECTOR, enforce_detection=False)
             for i, face in enumerate(faces):
-                facial_area = face.get("facial_area", {})
-                x, y, w, h = facial_area.get("x", 0), facial_area.get("y", 0), facial_area.get("w", 0), facial_area.get("h", 0)
-                cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                x, y, w, h = face["facial_area"].values()
+                cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
                 if register_mode and new_face_name:
                     save_face_embedding(face["face"], new_face_name)
                 else:
                     name, confidence = recognize_face(face["face"])
-                    cv2.putText(image, f"{name} ({confidence:.2f})", (x, y-10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
+                    cv2.putText(image, f"{name} ({confidence:.2f})", (x, y - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
 
             st.image(image, caption="Processed Image", use_container_width=True)
         except Exception as e:
             st.error(f"Error: {str(e)}")
 
 else:  # Webcam mode
-    FRAME_WINDOW = st.empty()
-    cam = cv2.VideoCapture(0)
+    st.info("Starting Webcam...")
 
-    if not cam.isOpened():
-        st.error("Error: Cannot access webcam. Check permissions or camera index.")
+    cam_index = find_working_camera()
+    if cam_index is None:
+        st.error("Error: Cannot access any webcam. Check permissions or physical connection.")
+        st.stop()
 
+    cam = cv2.VideoCapture(cam_index)
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
+    FRAME_WINDOW = st.empty()
     stop_button = st.button("Stop Webcam")
     frame_count = 0
 
     while not stop_button:
         ret, frame = cam.read()
         if not ret:
-            st.error("Failed to capture frame. Try restarting the app or checking camera access.")
+            st.error("Error: Failed to capture frame. Check webcam or permissions.")
             break
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -119,22 +127,21 @@ else:  # Webcam mode
             try:
                 faces = DeepFace.extract_faces(frame, detector_backend=DETECTOR, enforce_detection=False)
                 for face in faces:
-                    if face.get("confidence", 0) > 0.9:
-                        facial_area = face.get("facial_area", {})
-                        x, y, w, h = facial_area.get("x", 0), facial_area.get("y", 0), facial_area.get("w", 0), facial_area.get("h", 0)
-                        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                    if face["confidence"] > 0.9:
+                        x, y, w, h = face["facial_area"].values()
+                        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
                         if register_mode and new_face_name:
                             save_face_embedding(face["face"], new_face_name)
                         else:
                             name, confidence = recognize_face(face["face"])
-                            cv2.putText(frame, f"{name} ({confidence:.2f})", (x, y-10),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
+                            cv2.putText(frame, f"{name} ({confidence:.2f})", (x, y - 10),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
             except Exception as e:
-                st.error(f"Error processing faces: {str(e)}")
+                st.error(f"Detection error: {str(e)}")
 
         FRAME_WINDOW.image(frame)
         sleep(0.01)
 
     cam.release()
-    st.warning("Webcam stopped")
+    st.warning("Webcam stopped.")
