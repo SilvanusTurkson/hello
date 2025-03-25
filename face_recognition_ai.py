@@ -1,5 +1,3 @@
-# face_recognition_ai.py
-
 import streamlit as st
 import cv2
 import numpy as np
@@ -80,7 +78,8 @@ if input_mode == "Upload Image":
         try:
             faces = DeepFace.extract_faces(image, detector_backend=DETECTOR, enforce_detection=False)
             for i, face in enumerate(faces):
-                x, y, w, h = face["facial_area"].values()  # Fixed the unpacking error
+                facial_area = face.get("facial_area", {})
+                x, y, w, h = facial_area.get("x", 0), facial_area.get("y", 0), facial_area.get("w", 0), facial_area.get("h", 0)
                 cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
                 if register_mode and new_face_name:
@@ -116,8 +115,9 @@ else:  # Webcam mode
             try:
                 faces = DeepFace.extract_faces(frame, detector_backend=DETECTOR, enforce_detection=False)
                 for face in faces:
-                    if face["confidence"] > 0.9:
-                        x, y, w, h = face["facial_area"].values()  # Fixed the unpacking error
+                    if face.get("confidence", 0) > 0.9:
+                        facial_area = face.get("facial_area", {})
+                        x, y, w, h = facial_area.get("x", 0), facial_area.get("y", 0), facial_area.get("w", 0), facial_area.get("h", 0)
                         cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
                         if register_mode and new_face_name:
