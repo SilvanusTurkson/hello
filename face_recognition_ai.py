@@ -9,7 +9,7 @@ import os
 from time import sleep
 
 # ===== CONFIG =====
-KNOWN_FACES_DB = "faces_db.csv"  # CSV to store known faces
+KNOWN_FACES_DB = "face_embeddings.csv"  # CSV to store known faces
 MODEL = "Facenet512"             # Best accuracy: "ArcFace" or "Facenet512"
 DETECTOR = "retinaface"          # Best detector: "retinaface" or "mtcnn"
 THRESHOLD = 0.6                  # Higher = stricter matches
