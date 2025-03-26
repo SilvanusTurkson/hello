@@ -13,7 +13,7 @@ THRESHOLD = 0.6
 
 def initialize_webcam():
     for index in range(5):  # Try multiple webcam indices
-        cam = cv2.VideoCapture(index)
+        cam = cv2.VideoCapture(index, cv2.CAP_DSHOW if os.name == 'nt' else cv2.CAP_V4L2)
         if cam.isOpened():
             return cam
     return None
