@@ -126,15 +126,16 @@ def recognize_face(face_img, df, true_label=None):
         for _, row in df.iterrows():
             db_embedding = np.array(row["embedding"])
             similarity = np.dot(query_embedding, db_embedding) / (
-                    np.linalg.norm(query_embedding) * np.linalg.norm(db_embedding)
-                if similarity > best_match[1]:
+                    np.linalg.norm(query_embedding) * np.linalg.norm(db_embedding))
+
+            if similarity > best_match[1]:
                 best_match = (row["name"], similarity)
 
-            result = best_match if best_match[1] > THRESHOLD else ("Unknown", best_match[1])
+        result = best_match if best_match[1] > THRESHOLD else ("Unknown", best_match[1])
 
-            # Store evaluation data if true_label is provided
-            if true_label is not None:
-                st.session_state.evaluation_data['true_labels'].append(true_label)
+        # Store evaluation data if true_label is provided
+        if true_label is not None:
+            st.session_state.evaluation_data['true_labels'].append(true_label)
             st.session_state.evaluation_data['predicted_labels'].append(result[0])
             st.session_state.evaluation_data['confidence_scores'].append(result[1])
 
